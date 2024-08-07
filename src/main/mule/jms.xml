@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:s3="http://www.mulesoft.org/schema/mule/s3" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:jms="http://www.mulesoft.org/schema/mule/jms"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/s3 http://www.mulesoft.org/schema/mule/s3/current/mule-s3.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="96d0c186-0126-4f56-b072-f84a24e6e889" >
+		<http:listener-connection host="0.0.0.0" port="8082" />
+	</http:listener-config>
+	<jms:config name="JMS_Config" doc:name="JMS Config" doc:id="f44c300e-203c-4923-b334-7d596295bde0" >
+		<jms:active-mq-connection username="admin" password="admin" >
+			<jms:factory-configuration brokerUrl="tcp://localhost:61616" />
+		</jms:active-mq-connection>
+	</jms:config>
+	<flow name="jmsFlow" doc:id="03802b11-f685-4f4c-8ad5-91ee913c9368" >
+		<http:listener doc:name="Listener" doc:id="d06d3915-28f7-44ac-b8de-1ab90bc3a548" config-ref="HTTP_Listener_config" path="/jms"/>
+		<logger level="INFO" doc:name="Logger" doc:id="031aee32-2699-42c6-8e9d-1d0d6df8c1ff" message="start logger"/>
+		<jms:publish doc:name="Publish" doc:id="2efb54ad-acbf-4024-8dbf-fcbffbec2fb9" config-ref="JMS_Config" destination="jms" sendCorrelationId="ALWAYS">
+			<jms:message outboundContentType="application/json" />
+		</jms:publish>
+		<ee:transform doc:name="Transform Message" doc:id="af2943d5-b7ee-425a-a97f-8b8b233073c2" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="4f7ff0ef-67a4-480f-a14c-ec17d571134c" message="end logger"/>
+	</flow>
+	<flow name="jmsFlow1" doc:id="9a3ee11b-b468-497b-b601-654b205070e3" >
+		<http:listener doc:name="Listener" doc:id="5a221199-7f11-4b55-b2cc-c4a849f3d8cd" config-ref="HTTP_Listener_config" path="/jms-consume"/>
+		<logger level="INFO" doc:name="Logger" doc:id="e4324b9d-5d9a-42fb-9831-dc70e09bfcd3" message="start logger"/>
+		<jms:consume doc:name="Consume" doc:id="6955a8f7-da5b-465c-a5d8-843fd1566b08" config-ref="JMS_Config" destination="jms" contentType="application/json" ackMode="MANUAL">
+			<jms:consumer-type >
+				<jms:queue-consumer />
+			</jms:consumer-type>
+		</jms:consume>
+		<set-variable value="#[attributes.ackId]" doc:name="Set Variable" doc:id="aef681f6-2370-4879-9986-6ed4ce3ee57e" variableName="ackId"/>
+		<logger level="INFO" doc:name="Logger" doc:id="701ecf47-1a63-4094-9c21-c0f257352fb4" message="#[vars.ackId]"/>
+		<ee:transform doc:name="Transform Message" doc:id="656b1b73-a1e5-47d1-8c87-293a279095f6" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<jms:recover-session doc:name="Recover session" doc:id="db254330-19e1-4b82-82de-3d7d7916fede" ackId="#[vars.ackId]"/>
+		<logger level="INFO" doc:name="Logger" doc:id="eab1a793-4125-4e1b-be34-276f72124514" message="#[payload]"/>
+		<jms:ack doc:name="Ack" doc:id="7bb151c7-8843-4b0e-8088-3c6d60d9edfa" ackId="#[vars.ackId]" />
+	</flow>
+	<flow name="On-new-message" doc:id="bda6a8bc-8e47-4ee0-8faa-eba8940b8f70" >
+		<jms:listener doc:name="On New Message" doc:id="31cc70e7-a0cd-4f75-a7e7-1edf2e49e695" config-ref="JMS_Config" destination="mulesoft" inboundContentType="application/json">
+			<jms:consumer-type >
+				<jms:queue-consumer />
+			</jms:consumer-type>
+			<jms:response sendCorrelationId="ALWAYS" />
+		</jms:listener>
+		<logger level="INFO" doc:name="Logger" doc:id="5ce175f7-fddb-4766-939d-324ae6b48db0" message="#[payload]"/>
+	</flow>
+	<flow name="jmsFlow2" doc:id="d181d6d6-f788-4ac1-a62a-f2c407fecd46" >
+		<http:listener doc:name="Listener" doc:id="f9926f5a-3903-4006-939b-971a385befbf" config-ref="HTTP_Listener_config" path="/publish-consume"/>
+		<logger level="INFO" doc:name="Logger" doc:id="670855b0-a3b2-4e64-90d3-5fceb69a06b7" message="start logger"/>
+		<jms:publish-consume doc:name="Publish consume" doc:id="8b1e38c8-8501-4fb3-98aa-052d443635cb" config-ref="JMS_Config" destination="jms" sendCorrelationId="ALWAYS">
+			<jms:message >
+				<jms:reply-to destination="mulesoft" />
+			</jms:message>
+			<jms:publish-configuration timeToLive="10" timeToLiveUnit="MINUTES" />
+			<jms:consume-configuration maximumWait="10" maximumWaitUnit="MINUTES" inboundContentType="application/json" />
+		</jms:publish-consume>
+		<ee:transform doc:name="Transform Message" doc:id="e28f8938-4217-43ea-9791-fc25f95741f6" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="08d9995c-4037-4d19-a72e-9789a1144f05" message="#[payload]"/>
+		<logger level="INFO" doc:name="Logger" doc:id="9d607c3d-c1cb-4df0-8f76-2c53e7bb5a68" message="end payload"/>
+	</flow>
+</mule>
